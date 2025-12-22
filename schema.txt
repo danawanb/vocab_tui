@@ -1,0 +1,11 @@
+CREATE TABLE vocab (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  word TEXT,
+  pos TEXT,
+  core_meaning TEXT,
+  common_collocations TEXT,
+  example_sentence TEXT,
+  register TEXT,
+  notes TEXT,
+  count integer default 0);
+CREATE TABLE vocab_answer(id integer primary key autoincrement, id_vocab integer, jawaban text, is_correct integer, created_at text);
