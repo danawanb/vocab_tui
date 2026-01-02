@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jmoiron/sqlx"
@@ -75,6 +76,12 @@ var (
 			Foreground(lipgloss.Color("#A6E3A1")).
 			Bold(true)
 	docStyle = lipgloss.NewStyle().Margin(1, 2)
+
+	infoStyle = func() lipgloss.Style {
+		b := lipgloss.RoundedBorder()
+		b.Left = "┤"
+		return titleStyle.BorderStyle(b)
+	}()
 )
 
 type ScreenType int
@@ -101,6 +108,8 @@ type model struct {
 	trainInputs    []textinput.Model
 	trainStatus    int //0 mulai 1 ok 2 err dll
 	trainTables    table.Model
+	trainViewPort  viewport.Model
+	trainVReady    bool
 	db             *sqlx.DB
 	//list
 	listVocab list.Model
@@ -163,6 +172,8 @@ func initialModel() model {
 		trainVocabList: res,
 		trainStatus:    0,
 		trainTables:    table.New(),
+		trainVReady:    false,
+		trainViewPort:  viewport.New(80, 20),
 		db:             db,
 		listVocab:      list.New(items, list.NewDefaultDelegate(), 80, 25),
 	}
@@ -305,6 +316,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case TRAIN:
+		msgx := msg
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			if m.trainStatus == 2 {
@@ -319,6 +331,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.trainInputs[i].Blur()
 					}
 					return m, nil
+				case "enter":
+					var curContent strings.Builder
+					curContent.WriteString(m.trainTables.Rows()[m.trainTables.Cursor()][0])
+					curContent.WriteString("\n\n")
+					curContent.WriteString(m.trainTables.Rows()[m.trainTables.Cursor()][3])
+					m.trainStatus = 3
+					m.trainViewPort.SetContent(curContent.String())
+					return m, nil
+
 				case "up", "down", "k", "j":
 					var cmd tea.Cmd
 					//nav
@@ -377,6 +398,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.trainInputs[i].Blur()
 			}
 			return m, nil
+
+		case tea.WindowSizeMsg:
+			if m.trainStatus == 3 {
+				headerHeight := lipgloss.Height(m.headerView())
+				footerHeight := lipgloss.Height(m.footerView())
+				verticalMarginHeight := headerHeight + footerHeight
+
+				if !m.trainVReady {
+					m.trainViewPort = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
+					m.trainViewPort.YPosition = headerHeight
+					m.trainVReady = true
+				} else {
+					m.trainViewPort.Width = msg.Width
+					m.trainViewPort.Height = msg.Height - verticalMarginHeight
+				}
+				switch msg := msgx.(type) {
+				case tea.KeyMsg:
+					switch msg.String() {
+					case "ctrl+c", "q":
+						return m, tea.Quit
+					case "esc":
+						m.trainStatus = 2
+					}
+				}
+
+			}
+
 		case doneMsg:
 			m.isLoading = false
 			m.focusIndex = 0
@@ -628,6 +676,10 @@ func (m model) View() string {
 			s.WriteString("\n")
 			s.WriteString(m.trainTables.View())
 			s.WriteString(helpStyle.Render("↑/↓: navigate table • esc: back to menu"))
+
+		case 3:
+			s.WriteString("\n")
+			return fmt.Sprintf("%s\n%s\n%s", m.headerView(), m.trainViewPort.View(), m.footerView())
 		}
 
 	case REVIEW:
@@ -735,4 +787,16 @@ func newAnswerTable(values []Answer) table.Model {
 	tt.SetStyles(st)
 
 	return tt
+}
+
+func (m model) headerView() string {
+	title := titleStyle.Render("Details")
+	line := strings.Repeat("─", max(0, m.trainViewPort.Width-lipgloss.Width(title)))
+	return lipgloss.JoinHorizontal(lipgloss.Center, title, line)
+}
+
+func (m model) footerView() string {
+	info := infoStyle.Render(fmt.Sprintf("%3.f%%", m.trainViewPort.ScrollPercent()*100))
+	line := strings.Repeat("─", max(0, m.trainViewPort.Width-lipgloss.Width(info)))
+	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
 }
