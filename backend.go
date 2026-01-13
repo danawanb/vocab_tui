@@ -74,12 +74,14 @@ func JawabRandomVocab(answereds []Answer) ([]Answer, error) {
 	})
 
 	if err != nil {
-		panic(err.Error())
+		return nil, err
+	}
+	if len(chat.Choices) == 0 || len(chat.Choices[0].Message.Content) == 0 {
+		return nil, fmt.Errorf("no response content from model")
 	}
 	err = json.Unmarshal([]byte(chat.Choices[0].Message.Content), &vocabRes)
-
 	if err != nil {
-		fmt.Println(err.Error())
+		return nil, err
 	}
 
 	//println(chat.Choices[0].Message.Content)
@@ -126,10 +128,6 @@ func updateVocabCount(db *sqlx.DB, id int) error {
 func InsertVocabulary(db *sqlx.DB, theme string, num int) error {
 	ctx := context.Background()
 
-	db, err := sqlx.Connect("sqlite3", "data.db")
-	if err != nil {
-		return err
-	}
 	curVoc, err := GetCurVocab(db)
 	if err != nil {
 		return err
@@ -159,13 +157,15 @@ func InsertVocabulary(db *sqlx.DB, theme string, num int) error {
 	})
 
 	if err != nil {
-		panic(err.Error())
+		return err
+	}
+	if len(chat.Choices) == 0 || len(chat.Choices[0].Message.Content) == 0 {
+		return fmt.Errorf("no response content from model")
 	}
 	var vocabRes Vocabularies
 	err = json.Unmarshal([]byte(chat.Choices[0].Message.Content), &vocabRes)
-
 	if err != nil {
-		fmt.Println(err.Error())
+		return err
 	}
 
 	for _, vRes := range vocabRes.Vocab {

@@ -535,11 +535,15 @@ func (m *model) submitForm(menu ScreenType) tea.Cmd {
 	m.isLoading = true
 
 	var insert []Answer
-	for i, input := range m.trainInputs {
+	for i := range m.trainVocabList {
+		ans := ""
+		if i < len(m.trainInputs) {
+			ans = m.trainInputs[i].Value()
+		}
 		singleInsert := Answer{
 			Id:     m.trainVocabList[i].Id,
 			Word:   m.trainVocabList[i].Word,
-			Answer: input.Value(),
+			Answer: ans,
 		}
 		insert = append(insert, singleInsert)
 	}
@@ -650,7 +654,12 @@ func (m model) View() string {
 		case 0:
 			s.WriteString("\n")
 			if !m.isLoading {
-				for i, val := range m.trainVocabList {
+				limit := len(m.trainVocabList)
+				if len(m.trainInputs) < limit {
+					limit = len(m.trainInputs)
+				}
+				for i := 0; i < limit; i++ {
+					val := m.trainVocabList[i]
 					s.WriteString(inputLabelStyle.Render(val.Word))
 					s.WriteString(m.trainInputs[i].View())
 					s.WriteString("\n")
