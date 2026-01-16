@@ -128,6 +128,8 @@ func (i item) Description() string { return i.meaning }
 func (i item) FilterValue() string { return i.word }
 
 func main() {
+	cwd, _ := os.Getwd()
+	log.Println("CWD:", cwd)
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 	_, err := p.Run()
 	if err != nil {
@@ -313,6 +315,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textInputs[i].SetValue("")
 				m.textInputs[i].Blur()
 			}
+			// Reload vocabulary list after adding new vocabulary
+			m.reloadVocabList()
 			return m, nil
 		}
 
@@ -698,7 +702,7 @@ func (m model) View() string {
 			s.WriteString(m.textInputs[0].View())
 			s.WriteString("\n\n")
 
-			s.WriteString(inputLabelStyle.Render("Meaning:"))
+			s.WriteString(inputLabelStyle.Render("Number:"))
 			s.WriteString("\n")
 			s.WriteString(m.textInputs[1].View())
 			s.WriteString("\n\n")
@@ -893,4 +897,21 @@ func (m model) footerViewDetail() string {
 	info := infoStyle.Render(fmt.Sprintf("%3.f%%", m.detailViewPort.ScrollPercent()*100))
 	line := strings.Repeat("─", max(0, m.detailViewPort.Width-lipgloss.Width(info)))
 	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
+}
+
+func (m *model) reloadVocabList() {
+	allVocab, err := AllVocabulary(m.db)
+	if err != nil {
+		log.Printf("Error reloading vocab list: %v", err)
+		return
+	}
+
+	items := []list.Item{}
+	for _, voc := range allVocab {
+		singleList := item{id: strconv.Itoa(voc.Id), word: voc.Word, meaning: voc.CoreMeaning}
+		items = append(items, singleList)
+	}
+
+	m.listVocab.SetItems(items)
+	log.Printf("Reloaded %d vocabulary items", len(items))
 }
