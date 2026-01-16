@@ -315,7 +315,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textInputs[i].SetValue("")
 				m.textInputs[i].Blur()
 			}
-			// Reload vocabulary list after adding new vocabulary
 			m.reloadVocabList()
 			return m, nil
 		}
