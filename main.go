@@ -87,11 +87,12 @@ var (
 type ScreenType int
 
 const (
-	MENU       ScreenType = 69
-	ADD_VOCAB  ScreenType = 0
-	TRAIN      ScreenType = 1
-	REVIEW     ScreenType = 2
-	VOCAB_LIST ScreenType = 3
+	MENU         ScreenType = 69
+	ADD_VOCAB    ScreenType = 0
+	TRAIN        ScreenType = 1
+	REVIEW       ScreenType = 2
+	VOCAB_LIST   ScreenType = 3
+	VOCAB_DETAIL ScreenType = 4
 )
 
 type model struct {
@@ -112,7 +113,10 @@ type model struct {
 	trainVReady    bool
 	db             *sqlx.DB
 	//list
-	listVocab list.Model
+	listVocab      list.Model
+	detailViewPort viewport.Model
+	detailVReady   bool
+	selectedVocab  VocabularyRes
 }
 
 type item struct {
@@ -176,6 +180,8 @@ func initialModel() model {
 		trainViewPort:  viewport.New(80, 20),
 		db:             db,
 		listVocab:      list.New(items, list.NewDefaultDelegate(), 80, 25),
+		detailViewPort: viewport.New(80, 20),
+		detailVReady:   false,
 	}
 	m.listVocab.Title = "Vocabulary List"
 	m.listVocab.SetShowStatusBar(true)
@@ -477,12 +483,77 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.screen = MENU
 				return m, nil
+			case "enter":
+				if it, ok := m.listVocab.SelectedItem().(item); ok {
+					id, err := strconv.Atoi(it.id)
+					if err == nil {
+						detail, derr := GetVocabularyByID(m.db, id)
+						if derr == nil {
+							var b strings.Builder
+							term := detail.Word
+							if detail.POS != "" {
+								term = term + " (" + detail.POS + ")"
+							}
+							b.WriteString(titleStyle.Render(term))
+							b.WriteString("\n\n")
+							b.WriteString(detail.CoreMeaning)
+
+							if detail.CommonCollocations != "" {
+								b.WriteString("\n\nCommon collocations:\n")
+								b.WriteString(detail.CommonCollocations)
+							}
+							if detail.ExampleSentence != "" {
+								b.WriteString("\n\nExample:\n")
+								b.WriteString(detail.ExampleSentence)
+							}
+							if detail.Register != "" {
+								b.WriteString("\n\nRegister: ")
+								b.WriteString(detail.Register)
+							}
+							if detail.Notes != "" {
+								b.WriteString("\n\nNotes:\n")
+								b.WriteString(detail.Notes)
+							}
+							m.selectedVocab = detail
+							m.detailViewPort.SetContent(b.String())
+							m.screen = VOCAB_DETAIL
+						}
+					}
+				}
+				return m, nil
 			}
 		}
 
 		var cmd tea.Cmd
 		m.listVocab, cmd = m.listVocab.Update(msg)
 		return m, cmd
+	case VOCAB_DETAIL:
+		switch msg := msg.(type) {
+		case tea.WindowSizeMsg:
+			headerHeight := lipgloss.Height(m.headerViewDetail())
+			footerHeight := lipgloss.Height(m.footerViewDetail())
+			verticalMarginHeight := headerHeight + footerHeight
+
+			if !m.detailVReady {
+				m.detailViewPort = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
+				m.detailViewPort.YPosition = headerHeight
+				m.detailVReady = true
+			} else {
+				m.detailViewPort.Width = msg.Width
+				m.detailViewPort.Height = msg.Height - verticalMarginHeight
+			}
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "ctrl+c", "q":
+				return m, tea.Quit
+			case "esc":
+				m.screen = VOCAB_LIST
+				return m, nil
+			}
+		}
+		var vcmd tea.Cmd
+		m.detailViewPort, vcmd = m.detailViewPort.Update(msg)
+		return m, vcmd
 	default:
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -702,7 +773,9 @@ func (m model) View() string {
 		s.WriteString("\n")
 		s.WriteString(m.listVocab.View())
 		s.WriteString("\n")
-		s.WriteString(helpStyle.Render("esc: back to menu"))
+		s.WriteString(helpStyle.Render("enter: open detail • esc: back to menu"))
+	case VOCAB_DETAIL:
+		return fmt.Sprintf("%s\n%s\n%s", m.headerViewDetail(), m.detailViewPort.View(), m.footerViewDetail())
 
 	}
 
@@ -807,5 +880,17 @@ func (m model) headerView() string {
 func (m model) footerView() string {
 	info := infoStyle.Render(fmt.Sprintf("%3.f%%", m.trainViewPort.ScrollPercent()*100))
 	line := strings.Repeat("─", max(0, m.trainViewPort.Width-lipgloss.Width(info)))
+	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
+}
+
+func (m model) headerViewDetail() string {
+	title := titleStyle.Render("Vocabulary Detail")
+	line := strings.Repeat("─", max(0, m.detailViewPort.Width-lipgloss.Width(title)))
+	return lipgloss.JoinHorizontal(lipgloss.Center, title, line)
+}
+
+func (m model) footerViewDetail() string {
+	info := infoStyle.Render(fmt.Sprintf("%3.f%%", m.detailViewPort.ScrollPercent()*100))
+	line := strings.Repeat("─", max(0, m.detailViewPort.Width-lipgloss.Width(info)))
 	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
 }

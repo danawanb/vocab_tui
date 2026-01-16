@@ -208,3 +208,12 @@ func AllVocabulary(db *sqlx.DB) ([]VocabularyList, error) {
 	return res, nil
 
 }
+
+func GetVocabularyByID(db *sqlx.DB, id int) (VocabularyRes, error) {
+	var res VocabularyRes
+	err := db.Get(&res, "select id, word, pos, core_meaning, common_collocations, example_sentence, register, notes from vocab where id = ?", id)
+	if err != nil {
+		return res, err
+	}
+	return res, nil
+}
