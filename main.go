@@ -117,10 +117,18 @@ type model struct {
 	detailViewPort viewport.Model
 	detailVReady   bool
 	selectedVocab  VocabularyRes
+	//delete confirmation
+	deleteConfirm DeleteConfirmation
+	isDeleting    bool
 }
 
 type item struct {
 	id, word, meaning string
+}
+
+type DeleteConfirmation struct {
+	ShowConfirm bool
+	Vocab       VocabularyList
 }
 
 func (i item) Title() string       { return i.word }
@@ -219,6 +227,10 @@ func initialModel() model {
 		t.SetValue("")
 		m.trainInputs[i] = t
 	}
+
+	// Initialize delete state
+	m.deleteConfirm = DeleteConfirmation{ShowConfirm: false}
+	m.isDeleting = false
 
 	return m
 }
@@ -485,6 +497,55 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "esc":
 				m.screen = MENU
+				return m, nil
+			case "d":
+				// Delete key
+				if it, ok := m.listVocab.SelectedItem().(item); ok {
+					id, err := strconv.Atoi(it.id)
+					if err == nil {
+						// Quick delete - no confirmation needed
+						m.isDeleting = true
+
+						// Delete immediately
+						err := DeleteVocabulary(m.db, id)
+
+						// Reset states
+						m.isDeleting = false
+
+						if err == nil {
+							// Delete successful - reload list immediately and return to main menu
+							m.reloadVocabList()
+							m.screen = MENU
+						} else {
+							log.Printf("Quick delete failed: %v", err)
+						}
+					}
+				}
+				return m, nil
+			case "y":
+				// Confirm delete
+				if m.deleteConfirm.ShowConfirm && m.deleteConfirm.Vocab.Id > 0 {
+					// Set loading state immediately
+					m.isDeleting = true
+
+					// Delete immediately (no async delay)
+					err := DeleteVocabulary(m.db, m.deleteConfirm.Vocab.Id)
+
+					// Reset states
+					m.isDeleting = false
+					m.deleteConfirm = DeleteConfirmation{ShowConfirm: false}
+
+					if err == nil {
+						// Delete successful - reload list immediately and go to menu
+						m.reloadVocabList()
+						m.screen = MENU
+					}
+
+					return m, nil
+				}
+			case "n":
+				// Cancel delete
+				m.deleteConfirm = DeleteConfirmation{ShowConfirm: false}
 				return m, nil
 			case "enter":
 				if it, ok := m.listVocab.SelectedItem().(item); ok {
@@ -774,9 +835,44 @@ func (m model) View() string {
 	case VOCAB_LIST:
 		s.WriteString(titleStyle.Render("All Vocabulary"))
 		s.WriteString("\n")
-		s.WriteString(m.listVocab.View())
-		s.WriteString("\n")
-		s.WriteString(helpStyle.Render("enter: open detail • esc: back to menu"))
+
+		if m.deleteConfirm.ShowConfirm {
+			// Show delete confirmation
+			s.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FF6B6D")).
+				Bold(true).
+				Render("⚠️  DELETE CONFIRMATION"))
+			s.WriteString("\n\n")
+
+			s.WriteString(focusedStyle.Render("Word: " + m.deleteConfirm.Vocab.Word))
+			s.WriteString("\n")
+			s.WriteString(blurredStyle.Render("Meaning: " + m.deleteConfirm.Vocab.CoreMeaning))
+			s.WriteString("\n\n")
+
+			s.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FF6B6D")).
+				Render("This will permanently delete this vocabulary."))
+			s.WriteString("\n\n")
+
+			s.WriteString(buttonStyle.Render("Confirm (y)"))
+			s.WriteString(" ")
+			s.WriteString(buttonBlurredStyle.Render("Cancel (n)"))
+			s.WriteString("\n\n")
+
+			s.WriteString(helpStyle.Render("y: confirm • n: cancel • d: quick delete (no confirmation)"))
+		} else if m.isDeleting {
+			// Show delete loading
+			s.WriteString("\n\n")
+			s.WriteString(m.spinner.View())
+			s.WriteString(" Deleting vocabulary...")
+			s.WriteString("\n\n")
+			s.WriteString(helpStyle.Render("Deleting... please wait"))
+		} else {
+			// Normal vocabulary list view
+			s.WriteString(m.listVocab.View())
+			s.WriteString("\n")
+			s.WriteString(helpStyle.Render("enter: open detail • d: delete (return to menu) • esc: back to menu"))
+		}
 	case VOCAB_DETAIL:
 		return fmt.Sprintf("%s\n%s\n%s", m.headerViewDetail(), m.detailViewPort.View(), m.footerViewDetail())
 

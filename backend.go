@@ -217,3 +217,27 @@ func GetVocabularyByID(db *sqlx.DB, id int) (VocabularyRes, error) {
 	}
 	return res, nil
 }
+
+func DeleteVocabulary(db *sqlx.DB, id int) error {
+	// Start transaction for safety
+	tx, err := db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Delete related vocab_answer records first
+	_, err = tx.Exec("DELETE FROM vocab_answer WHERE id_vocab = ?", id)
+	if err != nil {
+		return err
+	}
+
+	// Delete vocabulary record
+	_, err = tx.Exec("DELETE FROM vocab WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+
+	// Commit transaction
+	return tx.Commit()
+}

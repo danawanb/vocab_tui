@@ -7,5 +7,11 @@ CREATE TABLE vocab (
   example_sentence TEXT,
   register TEXT,
   notes TEXT,
-  count integer default 0);
+  count integer default 0,
+  last_review text,
+  next_review text,
+  ease_factor real default 2.5,
+  interval integer default 1,
+  repetition integer default 0);
 CREATE TABLE vocab_answer(id integer primary key autoincrement, id_vocab integer, jawaban text, is_correct integer, created_at text);
+CREATE TABLE review_session(id integer primary key autoincrement, started_at text, completed_at text, total_cards integer, correct_answers integer);
