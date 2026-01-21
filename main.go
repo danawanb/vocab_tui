@@ -554,7 +554,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								b.WriteString(detail.Notes)
 							}
 							m.selectedVocab = detail
-							m.detailViewPort.SetContent(b.String())
+
+							// Wrap content to fit viewport width
+							contentWidth := max(20, m.detailViewPort.Width-4) // Ensure minimum width and account for padding
+							wrappedContent := lipgloss.NewStyle().
+								Width(contentWidth).
+								MaxWidth(contentWidth).
+								Render(b.String())
+							m.detailViewPort.SetContent(wrappedContent)
 							m.screen = VOCAB_DETAIL
 						}
 					}
@@ -580,6 +587,43 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.detailViewPort.Width = msg.Width
 				m.detailViewPort.Height = msg.Height - verticalMarginHeight
+			}
+
+			// Re-wrap content when window is resized if we have content
+			if m.detailVReady && m.selectedVocab.Word != "" {
+				var b strings.Builder
+				term := m.selectedVocab.Word
+				if m.selectedVocab.POS != "" {
+					term = term + " (" + m.selectedVocab.POS + ")"
+				}
+				b.WriteString(titleStyle.Render(term))
+				b.WriteString("\n\n")
+				b.WriteString(m.selectedVocab.CoreMeaning)
+
+				if m.selectedVocab.CommonCollocations != "" {
+					b.WriteString("\n\nCommon collocations:\n")
+					b.WriteString(m.selectedVocab.CommonCollocations)
+				}
+				if m.selectedVocab.ExampleSentence != "" {
+					b.WriteString("\n\nExample:\n")
+					b.WriteString(m.selectedVocab.ExampleSentence)
+				}
+				if m.selectedVocab.Register != "" {
+					b.WriteString("\n\nRegister: ")
+					b.WriteString(m.selectedVocab.Register)
+				}
+				if m.selectedVocab.Notes != "" {
+					b.WriteString("\n\nNotes:\n")
+					b.WriteString(m.selectedVocab.Notes)
+				}
+
+				// Re-wrap content with new width
+				contentWidth := max(20, m.detailViewPort.Width-4)
+				wrappedContent := lipgloss.NewStyle().
+					Width(contentWidth).
+					MaxWidth(contentWidth).
+					Render(b.String())
+				m.detailViewPort.SetContent(wrappedContent)
 			}
 		case tea.KeyMsg:
 			switch msg.String() {
